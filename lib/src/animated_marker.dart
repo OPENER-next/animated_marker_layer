@@ -19,6 +19,8 @@ class AnimatedMarker {
 
   final Size size;
 
+  final Alignment anchor;
+
   final Widget Function(
     BuildContext context,
     Animation<double> animation,
@@ -47,6 +49,7 @@ class AnimatedMarker {
     required this.child,
     this.size = const Size.square(30),
     SizeUnit sizeUnit = SizeUnit.pixels,
+    this.anchor = Alignment.center,
     this.animateInBuilder = _defaultAnimateBuilder,
     this.animateOutBuilder = _defaultAnimateBuilder,
     this.animateInCurve = Curves.elasticOut,

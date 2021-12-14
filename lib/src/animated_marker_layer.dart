@@ -146,12 +146,11 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
     final CustomPoint pxPoint = cachedPixelPosition ?? map.project(marker.point);
     final Size size = cachedPixelSize ?? marker.pixelSize(map.zoom);
 
-    // center position
-    final shiftX = size.width/2;
-    final shiftY = size.height/2;
+    // shift position to anchor
+    final shift = marker.anchor.alongSize(size);
 
-    final sw = CustomPoint(pxPoint.x + shiftX, pxPoint.y - shiftY);
-    final ne = CustomPoint(pxPoint.x - shiftX, pxPoint.y + shiftY);
+    final sw = CustomPoint(pxPoint.x + shift.dx, pxPoint.y - shift.dy);
+    final ne = CustomPoint(pxPoint.x - shift.dx, pxPoint.y + shift.dy);
 
     final isVisible = map.pixelBounds.containsPartialBounds(Bounds(sw, ne));
 
@@ -165,8 +164,8 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
       key: marker.key,
       width: size.width,
       height: size.height,
-      left: pos.x - shiftX,
-      top: pos.y - shiftY,
+      left: pos.x - shift.dx,
+      top: pos.y - shift.dy,
       child: animationDirection == null
         ? marker.child
         : AnimatedMarkerWidget(
