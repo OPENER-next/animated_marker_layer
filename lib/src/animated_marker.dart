@@ -21,6 +21,10 @@ class AnimatedMarker {
 
   final Alignment anchor;
 
+  // If false the marker will be counter rotated on map rotation, else it will rotate with the map.
+
+  final bool rotate;
+
   final Widget Function(
     BuildContext context,
     Animation<double> animation,
@@ -50,6 +54,7 @@ class AnimatedMarker {
     this.size = const Size.square(30),
     SizeUnit sizeUnit = SizeUnit.pixels,
     this.anchor = Alignment.center,
+    this.rotate = false,
     this.animateInBuilder = _defaultAnimateBuilder,
     this.animateOutBuilder = _defaultAnimateBuilder,
     this.animateInCurve = Curves.elasticOut,

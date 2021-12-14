@@ -160,15 +160,11 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
 
     final pos = pxPoint - map.getPixelOrigin();
 
-    return Positioned(
-      key: marker.key,
-      width: size.width,
-      height: size.height,
-      left: pos.x - shift.dx,
-      top: pos.y - shift.dy,
-      child: animationDirection == null
-        ? marker.child
-        : AnimatedMarkerWidget(
+
+    // Wrap in animated marker widget if animation direction is given
+    var markerWidget = animationDirection == null
+      ? marker.child
+      : AnimatedMarkerWidget(
           animationDirection: animationDirection,
           animateInCurve: marker.animateInCurve,
           animateOutCurve: marker.animateOutCurve,
@@ -178,8 +174,25 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
           animateOutBuilder: marker.animateOutBuilder,
           animateInDelay: marker.animateInDelay,
           animateOutDelay: marker.animateOutDelay,
-          child: marker.child,
-      )
+          child: marker.child
+        );
+
+    // Counter rotate marker to the map rotation if it should stay steady
+    markerWidget = !marker.rotate
+      ? Transform.rotate(
+          angle: -map.rotationRad,
+          alignment: marker.anchor,
+          child: markerWidget,
+        )
+      : markerWidget;
+
+    return Positioned(
+      key: marker.key,
+      width: size.width,
+      height: size.height,
+      left: pos.x - shift.dx,
+      top: pos.y - shift.dy,
+      child: markerWidget
     );
   }
 
