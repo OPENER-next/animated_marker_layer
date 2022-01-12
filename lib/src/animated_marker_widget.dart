@@ -101,11 +101,14 @@ class _AnimatedMarkerWidgetState extends State<AnimatedMarkerWidget> with Single
         oldWidget?.animateInDelay != widget.animateInDelay ||
         oldWidget?.animateOutDelay != widget.animateOutDelay
     ) {
-      _controller.duration = widget.animateInDuration + widget.animateInDelay;
-      _controller.reverseDuration = widget.animateOutDuration + widget.animateOutDelay;
+      final totalInDuration = widget.animateInDuration + widget.animateInDelay;
+      final totalOutDuration = widget.animateOutDuration + widget.animateOutDelay;
 
-      final startShift = widget.animateInDelay.inMicroseconds / widget.animateInDuration.inMicroseconds;
-      final endShift = widget.animateOutDelay.inMicroseconds / widget.animateOutDuration.inMicroseconds;
+      _controller.duration = totalInDuration;
+      _controller.reverseDuration = totalOutDuration;
+
+      final startShift =  widget.animateInDelay.inMicroseconds / totalInDuration.inMicroseconds;
+      final endShift = widget.animateOutDelay.inMicroseconds / totalOutDuration.inMicroseconds;
 
       _animation = CurvedAnimation(
         parent: _controller,
