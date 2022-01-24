@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:developer';
+
 import 'package:diffutil_dart/diffutil.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_map/plugin_api.dart';
@@ -29,7 +32,7 @@ class AnimatedMarkerLayer extends StatefulWidget {
   _AnimatedMarkerLayerState createState() => _AnimatedMarkerLayerState();
 }
 
-class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
+class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> with ChangeNotifier {
 
   late MapState map;
 
@@ -39,13 +42,7 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
 
   final _removedMarkers = <Key, AnimatedMarker>{};
 
-  // done for performance optimizations
-
-  var _previousZoom = -1.0;
-
-  final _pixelPositionCache = <CustomPoint>[];
-
-  final _pixelSizeCache = <Size>[];
+  StreamSubscription? _streamSubscription;
 
   @override
   void initState() {
@@ -58,7 +55,6 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
   void didUpdateWidget(covariant AnimatedMarkerLayer oldWidget) {
     super.didUpdateWidget(oldWidget);
     _update();
-    _refreshPixelCache();
   }
 
 
@@ -68,16 +64,10 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
 
     map = MapState.maybeOf(context)!;
 
-    map.onMoved.listen((_) {
-      if (map.zoom != _previousZoom) {
-        _refreshPixelCache();
-        // cache last zoom level to detect potential optimizations
-        _previousZoom = map.zoom;
-      }
-      setState(() {});
-    });
-
-    _refreshPixelCache();
+    // notify listeners whenever the map is moved
+    // this is done in order to trigger a repaint in the flow delegate
+    _streamSubscription?.cancel();
+    _streamSubscription = map.onMoved.listen((_) => notifyListeners());
   }
 
 
@@ -124,45 +114,13 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
   }
 
 
-
-  void _refreshPixelCache() {
-    _pixelPositionCache.clear();
-    _pixelSizeCache.clear();
-
-    for (final marker in _cachedMarkers) {
-      _pixelPositionCache.add(map.project(marker.point));
-      _pixelSizeCache.add(marker.pixelSize(map.zoom));
-    }
-  }
-
-
   /// Returns null if the marker widget is not visible.
 
   Widget? _buildMarkerWidget(AnimatedMarker marker, {
     AnimationDirection? animationDirection,
-    CustomPoint? cachedPixelPosition,
-    Size? cachedPixelSize,
   }) {
-    final CustomPoint pxPoint = cachedPixelPosition ?? map.project(marker.point);
-    final Size size = cachedPixelSize ?? marker.pixelSize(map.zoom);
-
-    // shift position to anchor
-    final shift = marker.anchor.alongSize(size);
-
-    final sw = CustomPoint(pxPoint.x + shift.dx, pxPoint.y - shift.dy);
-    final ne = CustomPoint(pxPoint.x - shift.dx, pxPoint.y + shift.dy);
-
-    final isVisible = map.pixelBounds.containsPartialBounds(Bounds(sw, ne));
-
-    if (!isVisible || size.longestSide <= 1) {
-      return null;
-    }
-
-    final pos = pxPoint - map.getPixelOrigin();
-
-
     // Wrap in animated marker widget if animation direction is given
-    var markerWidget = animationDirection == null
+    final markerWidget = animationDirection == null
       ? marker.child
       : AnimatedMarkerWidget(
           animationDirection: animationDirection,
@@ -177,21 +135,9 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
           child: marker.child
         );
 
-    // Counter rotate marker to the map rotation if it should stay steady
-    markerWidget = !marker.rotate
-      ? Transform.rotate(
-          angle: -map.rotationRad,
-          alignment: marker.anchor,
-          child: markerWidget,
-        )
-      : markerWidget;
-
-    return Positioned(
+    return SizedBox.fromSize(
       key: marker.key,
-      width: size.width,
-      height: size.height,
-      left: pos.x - shift.dx,
-      top: pos.y - shift.dy,
+      size: marker.size,
       child: markerWidget
     );
   }
@@ -221,8 +167,6 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
       if (_newMarkers.containsKey(marker.key)) {
         markerWidget = _buildMarkerWidget(
           marker,
-          cachedPixelPosition: _pixelPositionCache[i],
-          cachedPixelSize: _pixelSizeCache[i],
           animationDirection: AnimationDirection.animateIn
         );
 
@@ -233,8 +177,6 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
       else {
         markerWidget = _buildMarkerWidget(
           marker,
-          cachedPixelPosition: _pixelPositionCache[i],
-          cachedPixelSize: _pixelSizeCache[i]
         );
       }
 
@@ -248,7 +190,7 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
 
 
   bool _handleAnimationEnd(AnimateMarkerEndNotification notification) {
-    final positionedWidget = notification.context.findAncestorWidgetOfExactType<Positioned>();
+    final positionedWidget = notification.context.findAncestorWidgetOfExactType<SizedBox>();
     final key = positionedWidget!.key;
 
     switch (notification.animationDirection) {
@@ -271,11 +213,122 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
 
   @override
   Widget build(BuildContext context) {
-    return NotificationListener<AnimateMarkerEndNotification>(
-      onNotification: _handleAnimationEnd,
-      child: Stack(
-        children: _buildMarkerWidgets()
+    return RepaintBoundary(
+      child: NotificationListener<AnimateMarkerEndNotification>(
+        onNotification: _handleAnimationEnd,
+        child: Flow.unwrapped(
+          delegate: _AnimatedMarkerLayerDelegate(
+            markerLayerState: this
+          ),
+          children: _buildMarkerWidgets()
+        )
       )
     );
+  }
+
+
+  @override
+  void dispose() {
+    super.dispose();
+    _streamSubscription?.cancel();
+  }
+}
+
+
+
+
+class _AnimatedMarkerLayerDelegate extends FlowDelegate {
+
+  final _AnimatedMarkerLayerState markerLayerState;
+
+  final _pixelPositionCache = <CustomPoint<num>>[];
+
+  double _lastZoomLevel = -1;
+
+  _AnimatedMarkerLayerDelegate({
+    required this.markerLayerState,
+  }) : super(repaint: markerLayerState);
+
+
+  @override
+  bool shouldRepaint(_AnimatedMarkerLayerDelegate oldDelegate) {
+    if (markerLayerState != oldDelegate.markerLayerState) {
+      _pixelPositionCache.clear();
+      return true;
+    }
+    return false;
+  }
+
+
+  @override
+  bool shouldRelayout(covariant FlowDelegate oldDelegate) {
+    return false;
+  }
+
+
+  @override
+  void paintChildren(FlowPaintingContext context) {
+    Timeline.startSync("Doing Something");
+    final map = markerLayerState.map;
+
+    final mapPixelOrigin = map.getPixelOrigin();
+
+    final rebuildCache = _lastZoomLevel != map.zoom;
+
+    _lastZoomLevel = map.zoom;
+
+    for (int i = 0; i < context.childCount; i++) {
+      final marker = markerLayerState._cachedMarkers[i];
+
+      final childSize = context.getChildSize(i)!;
+      // shift position to anchor
+      final offset = marker.anchor.alongSize(childSize);
+
+      final CustomPoint<num> absolutePixelPosition;
+
+      if (rebuildCache) {
+        absolutePixelPosition = map.project(marker.point);
+
+        if (i >= _pixelPositionCache.length) {
+          _pixelPositionCache.add(absolutePixelPosition);
+        }
+        else {
+          _pixelPositionCache[i] = absolutePixelPosition;
+        }
+      }
+      else {
+        absolutePixelPosition = _pixelPositionCache[i];
+      }
+
+      final sw = CustomPoint(absolutePixelPosition.x + offset.dx, absolutePixelPosition.y - offset.dy);
+      final ne = CustomPoint(absolutePixelPosition.x - offset.dx, absolutePixelPosition.y + offset.dy);
+
+      // only paint marker if inside viewport
+      if (map.pixelBounds.containsPartialBounds(Bounds(sw, ne)) && childSize.longestSide > 1) {
+        final relativePixelPosition = absolutePixelPosition - mapPixelOrigin;
+
+        final transformationMatrix = Matrix4.translationValues(
+          relativePixelPosition.x.toDouble(),
+          relativePixelPosition.y.toDouble(),
+          0,
+        );
+        // counter rotate marker to the map rotation if it should stay steady
+        if (!marker.rotate) {
+          transformationMatrix.rotateZ(-map.rotationRad);
+        }
+
+        // scale widget size if it's given in any other unit then pixels
+        if (marker.sizeUnit != SizeUnit.pixels) {
+          final scale = marker.scaleFactor(map.zoom);
+          transformationMatrix.scale(scale, scale);
+        }
+
+        // apply anchor offset
+        transformationMatrix.translate(-offset.dx, -offset.dy);
+
+        context.paintChild(i, transform: transformationMatrix);
+      }
+    }
+    Timeline.finishSync();
   }
 }

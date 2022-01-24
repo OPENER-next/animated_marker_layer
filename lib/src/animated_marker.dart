@@ -1,7 +1,8 @@
 
-import 'package:animated_marker_layer/src/size_utils.dart';
 import 'package:flutter/widgets.dart';
 import 'package:latlong2/latlong.dart';
+
+import '/src/size_utils.dart';
 
 class AnimatedMarker {
   static Widget _defaultAnimateBuilder(BuildContext context, Animation<double> animation, Widget child) {
@@ -18,6 +19,8 @@ class AnimatedMarker {
   final Key key;
 
   final Size size;
+
+  final SizeUnit sizeUnit;
 
   final Alignment anchor;
 
@@ -45,14 +48,14 @@ class AnimatedMarker {
   final Duration animateInDelay;
   final Duration animateOutDelay;
 
-  late final Size Function(double zoom) pixelSize;
+  late final double Function(double zoom) scaleFactor;
 
   AnimatedMarker({
     required this.key,
     required this.point,
     required this.child,
     this.size = const Size.square(30),
-    SizeUnit sizeUnit = SizeUnit.pixels,
+    this.sizeUnit = SizeUnit.pixels,
     this.anchor = Alignment.center,
     this.rotate = false,
     this.animateInBuilder = _defaultAnimateBuilder,
@@ -65,19 +68,19 @@ class AnimatedMarker {
     this.animateOutDelay = Duration.zero,
   }) {
     if (sizeUnit == SizeUnit.pixels) {
-      pixelSize = _pixels;
+      scaleFactor = _pixels;
     }
     else {
-      pixelSize = _meters;
+      scaleFactor = _meters;
     }
   }
 
 
-  Size _pixels(double zoom) => size;
+  double _pixels(double zoom) => 1;
 
 
-  Size _meters(double zoom) {
-    return calcSizeFromMeter(size, point, zoom);
+  double _meters(double zoom) {
+    return 1 / metersPerPixel(point.latitude, zoom);
   }
 }
 
