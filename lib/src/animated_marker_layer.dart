@@ -229,6 +229,7 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> with ChangeNo
 
   @override
   void dispose() {
+    // TODO: FIX ERROR BECAUSE THIS DISPOSE CALLS THE CHANGENOTIFIER AND NOT THE DISPOSE OF THE STATE!
     super.dispose();
     _streamSubscription?.cancel();
   }
@@ -299,6 +300,8 @@ class _AnimatedMarkerLayerDelegate extends FlowDelegate {
       else {
         absolutePixelPosition = _pixelPositionCache[i];
       }
+
+      // THIS DOESN'T WORK CORRECTLY sometimes they are hidden to early probably because if scaling!!! because the size doesn't include this
 
       final sw = CustomPoint(absolutePixelPosition.x + offset.dx, absolutePixelPosition.y - offset.dy);
       final ne = CustomPoint(absolutePixelPosition.x - offset.dx, absolutePixelPosition.y + offset.dy);
