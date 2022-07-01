@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:diffutil_dart/diffutil.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_map/plugin_api.dart';
@@ -31,7 +33,9 @@ class AnimatedMarkerLayer extends StatefulWidget {
 
 class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
 
-  late MapState map;
+  late MapState _map;
+
+  StreamSubscription? _streamSubscription;
 
   final _cachedMarkers = <AnimatedMarker>[];
 
@@ -66,13 +70,15 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    map = MapState.maybeOf(context)!;
+    _streamSubscription?.cancel();
 
-    map.onMoved.listen((_) {
-      if (map.zoom != _previousZoom) {
+    _map = MapState.maybeOf(context)!;
+
+    _streamSubscription = _map.onMoved.listen((_) {
+      if (_map.zoom != _previousZoom) {
         _refreshPixelCache();
         // cache last zoom level to detect potential optimizations
-        _previousZoom = map.zoom;
+        _previousZoom = _map.zoom;
       }
       setState(() {});
     });
@@ -130,8 +136,8 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
     _pixelSizeCache.clear();
 
     for (final marker in _cachedMarkers) {
-      _pixelPositionCache.add(map.project(marker.point));
-      _pixelSizeCache.add(marker.pixelSize(map.zoom));
+      _pixelPositionCache.add(_map.project(marker.point));
+      _pixelSizeCache.add(marker.pixelSize(_map.zoom));
     }
   }
 
@@ -143,8 +149,8 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
     CustomPoint? cachedPixelPosition,
     Size? cachedPixelSize,
   }) {
-    final CustomPoint pxPoint = cachedPixelPosition ?? map.project(marker.point);
-    final Size size = cachedPixelSize ?? marker.pixelSize(map.zoom);
+    final CustomPoint pxPoint = cachedPixelPosition ?? _map.project(marker.point);
+    final Size size = cachedPixelSize ?? marker.pixelSize(_map.zoom);
 
     // shift position to anchor
     final shift = marker.anchor.alongSize(size);
@@ -152,13 +158,13 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
     final sw = CustomPoint(pxPoint.x + shift.dx, pxPoint.y - shift.dy);
     final ne = CustomPoint(pxPoint.x - shift.dx, pxPoint.y + shift.dy);
 
-    final isVisible = map.pixelBounds.containsPartialBounds(Bounds(sw, ne));
+    final isVisible = _map.pixelBounds.containsPartialBounds(Bounds(sw, ne));
 
     if (!isVisible || size.longestSide <= 1) {
       return null;
     }
 
-    final pos = pxPoint - map.getPixelOrigin();
+    final pos = pxPoint - _map.getPixelOrigin();
 
 
     // Wrap in animated marker widget if animation direction is given
@@ -180,7 +186,7 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
     // Counter rotate marker to the map rotation if it should stay steady
     markerWidget = !marker.rotate
       ? Transform.rotate(
-          angle: -map.rotationRad,
+          angle: -_map.rotationRad,
           alignment: marker.anchor,
           child: markerWidget,
         )
@@ -277,5 +283,12 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
         children: _buildMarkerWidgets()
       )
     );
+  }
+
+
+  @override
+  void dispose() {
+    _streamSubscription?.cancel();
+    super.dispose();
   }
 }
