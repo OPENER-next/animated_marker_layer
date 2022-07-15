@@ -9,8 +9,11 @@ import 'animated_marker_widget.dart';
 
 // TODO: hide via animation elements on threshold -> maybe introduce another hiddenArray
 
-class AnimatedMarkerLayer extends StatefulWidget {
-  final List<AnimatedMarker> markers;
+class AnimatedMarkerLayer<T extends AnimatedMarker> extends StatefulWidget {
+
+  /// This list must be immutable, i.a. should not be modified.
+
+  final List<T> markers;
 
   /// The minimal marker size until markers will be hidden
 
@@ -28,20 +31,19 @@ class AnimatedMarkerLayer extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _AnimatedMarkerLayerState createState() => _AnimatedMarkerLayerState();
+  _AnimatedMarkerLayerState<T> createState() => _AnimatedMarkerLayerState<T>();
 }
 
-class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
+
+class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<AnimatedMarkerLayer<T>> {
 
   late MapState _map;
 
   StreamSubscription? _streamSubscription;
 
-  final _cachedMarkers = <AnimatedMarker>[];
+  final _newMarkers = <Key>{};
 
-  final _newMarkers = <Key, AnimatedMarker>{};
-
-  final _removedMarkers = <Key, AnimatedMarker>{};
+  final _removedMarkers = <Key, T>{};
 
   // done for performance optimizations
 
@@ -59,9 +61,9 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
 
 
   @override
-  void didUpdateWidget(covariant AnimatedMarkerLayer oldWidget) {
+  void didUpdateWidget(covariant AnimatedMarkerLayer<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _update();
+    _update(oldWidget.markers);
     _refreshPixelCache();
   }
 
@@ -87,10 +89,9 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
   }
 
 
-  _update() {
-    final diffResult = calculateListDiff<AnimatedMarker>(
-      _cachedMarkers, widget.markers,
-      detectMoves: true,
+  _update([ List<T>oldMarkers = const [] ]) {
+    final diffResult = calculateListDiff<T>(
+      oldMarkers, widget.markers,
       equalityChecker: _equalityCheck
     );
 
@@ -99,43 +100,33 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
       update.when(
         insert: _addMarker,
         remove: _removeMarker,
-        // TODO: check if this is needed to update markers
         change: (index, oldData, newData) {},
         move: (from, to, data) {},
       );
     }
-
-    _cachedMarkers
-      ..clear()
-      ..addAll(widget.markers);
   }
 
 
-  bool _equalityCheck(AnimatedMarker marker1, AnimatedMarker marker2) {
-    return marker1.key == marker2.key;
-  }
+  bool _equalityCheck(T marker1, T marker2) => marker1.key == marker2.key;
 
 
-  void _addMarker(int index, AnimatedMarker newMarker) {
-    _newMarkers[newMarker.key] = newMarker;
+  void _addMarker(int index, T newMarker) {
+    _newMarkers.add(newMarker.key);
     // in case the added marker was shortly removed, remove it from the collection
     _removedMarkers.remove(newMarker.key);
   }
 
 
-  void _removeMarker(int index, AnimatedMarker removedMarker) {
+  void _removeMarker(int index, T removedMarker) {
     _removedMarkers[removedMarker.key] = removedMarker;
-    // in case the removed marker was shortly added, remove it from the collection
-    _newMarkers.remove(removedMarker.key);
   }
-
 
 
   void _refreshPixelCache() {
     _pixelPositionCache.clear();
     _pixelSizeCache.clear();
 
-    for (final marker in _cachedMarkers) {
+    for (final marker in widget.markers) {
       _pixelPositionCache.add(_map.project(marker.point));
       _pixelSizeCache.add(marker.pixelSize(_map.zoom));
     }
@@ -144,8 +135,8 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
 
   /// Returns null if the marker widget is not visible.
 
-  Widget? _buildMarkerWidget(AnimatedMarker marker, {
-    AnimationDirection? animationDirection,
+  Widget? _buildMarkerWidget(T marker, {
+    required AnimationDirection animationDirection,
     CustomPoint? cachedPixelPosition,
     Size? cachedPixelSize,
   }) {
@@ -166,22 +157,18 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
 
     final pos = pxPoint - _map.getPixelOrigin();
 
-
     // Wrap in animated marker widget if animation direction is given
-    var markerWidget = animationDirection == null
-      ? marker.child
-      : AnimatedMarkerWidget(
-          animationDirection: animationDirection,
-          animateInCurve: marker.animateInCurve,
-          animateOutCurve: marker.animateOutCurve,
-          animateInDuration: marker.animateInDuration,
-          animateOutDuration: marker.animateOutDuration,
-          animateInBuilder:  marker.animateInBuilder,
-          animateOutBuilder: marker.animateOutBuilder,
-          animateInDelay: marker.animateInDelay,
-          animateOutDelay: marker.animateOutDelay,
-          child: marker.child
-        );
+    Widget markerWidget = AnimatedMarkerWidget(
+      animationDirection: animationDirection,
+      animateInCurve: marker.animateInCurve,
+      animateOutCurve: marker.animateOutCurve,
+      animateInDuration: marker.animateInDuration,
+      animateOutDuration: marker.animateOutDuration,
+      animateInDelay: marker.animateInDelay,
+      animateOutDelay: marker.animateOutDelay,
+      markerKey: marker.key,
+      builder: marker.build
+    );
 
     // Counter rotate marker to the map rotation if it should stay steady
     markerWidget = !marker.rotate
@@ -213,36 +200,24 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
       );
 
       if (markerWidget == null) {
-        // remove element
+        // remove off screen markers immediately
         return true;
       }
       markerWidgets.add(markerWidget);
       return false;
     });
 
-    for (var i = 0; i < _cachedMarkers.length; i++) {
-      final marker = _cachedMarkers[i];
-
-      Widget? markerWidget;
-      if (_newMarkers.containsKey(marker.key)) {
-        markerWidget = _buildMarkerWidget(
-          marker,
-          cachedPixelPosition: _pixelPositionCache[i],
-          cachedPixelSize: _pixelSizeCache[i],
-          animationDirection: AnimationDirection.animateIn
-        );
-
-        if (markerWidget == null) {
-          _newMarkers.remove(marker.key);
-        }
-      }
-      else {
-        markerWidget = _buildMarkerWidget(
-          marker,
-          cachedPixelPosition: _pixelPositionCache[i],
-          cachedPixelSize: _pixelSizeCache[i]
-        );
-      }
+    for (var i = 0; i < widget.markers.length; i++) {
+      final marker = widget.markers[i];
+      final markerWidget = _buildMarkerWidget(
+        marker,
+        // if marker key was present in _newMarkers animate it, else not
+        animationDirection: _newMarkers.remove(marker.key)
+          ? AnimationDirection.animateIn
+          : AnimationDirection.none,
+        cachedPixelPosition: _pixelPositionCache[i],
+        cachedPixelSize: _pixelSizeCache[i]
+      );
 
       if (markerWidget != null) {
         markerWidgets.add(markerWidget);
@@ -253,23 +228,13 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
   }
 
 
-  bool _handleAnimationEnd(AnimateMarkerEndNotification notification) {
-    final positionedWidget = notification.context.findAncestorWidgetOfExactType<Positioned>();
-    final key = positionedWidget!.key;
-
-    switch (notification.animationDirection) {
-      case AnimationDirection.animateIn:
-        setState(() {
-          _newMarkers.remove(key);
-        });
-      break;
-      case AnimationDirection.animateOut:
-        setState(() {
-          _removedMarkers.remove(key);
-        });
-      break;
-      default:
-    }
+  bool _handleAnimationEnd(AnimatedMarkerRemoveNotification notification) {
+    // to prevent "setState() or markNeedsBuild() called during build."" error
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() {
+        _removedMarkers.remove(notification.markerKey);
+      });
+    });
 
     return true;
   }
@@ -277,7 +242,7 @@ class _AnimatedMarkerLayerState extends State<AnimatedMarkerLayer> {
 
   @override
   Widget build(BuildContext context) {
-    return NotificationListener<AnimateMarkerEndNotification>(
+    return NotificationListener<AnimatedMarkerRemoveNotification>(
       onNotification: _handleAnimationEnd,
       child: Stack(
         children: _buildMarkerWidgets()

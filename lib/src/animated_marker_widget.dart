@@ -1,19 +1,9 @@
 import 'package:flutter/widgets.dart';
 
 class AnimatedMarkerWidget extends StatefulWidget {
-  final Widget Function(
-    BuildContext context,
-    Animation<double> animation,
-    Widget child
-  ) animateInBuilder;
+  final Widget Function(BuildContext, Animation<double>) builder;
 
-  final Widget Function(
-    BuildContext context,
-    Animation<double> animation,
-    Widget child
-  ) animateOutBuilder;
-
-  final Widget child;
+  final Key markerKey;
 
   final AnimationDirection animationDirection;
 
@@ -31,9 +21,8 @@ class AnimatedMarkerWidget extends StatefulWidget {
 
   const AnimatedMarkerWidget({
     Key? key,
-    required this.animateInBuilder,
-    required this.animateOutBuilder,
-    required this.child,
+    required this.builder,
+    required this.markerKey,
     this.animationDirection = AnimationDirection.animateIn,
     this.animateInDuration = const Duration(milliseconds: 600),
     this.animateOutDuration = const Duration(milliseconds: 600),
@@ -53,26 +42,15 @@ class _AnimatedMarkerWidgetState extends State<AnimatedMarkerWidget> with Single
 
   late Animation<double> _animation;
 
-  late Widget Function(
-    BuildContext context,
-    Animation<double> animation,
-    Widget child
-  ) _builder = widget.animateInBuilder;
-
-
   @override
   void initState() {
     super.initState();
 
     _controller.addStatusListener((status) {
       // extra checks ensure that status changes triggered by the code itself are ignored
-      if (
-        (status == AnimationStatus.completed && widget.animationDirection == AnimationDirection.animateIn) ||
-        (status == AnimationStatus.dismissed && widget.animationDirection == AnimationDirection.animateOut)
-      ) {
-        AnimateMarkerEndNotification(
-          context: context,
-          animationDirection: widget.animationDirection
+      if (status == AnimationStatus.dismissed && widget.animationDirection == AnimationDirection.animateOut) {
+        AnimatedMarkerRemoveNotification(
+          markerKey: widget.markerKey
         ).dispatch(context);
       }
     });
@@ -122,39 +100,28 @@ class _AnimatedMarkerWidgetState extends State<AnimatedMarkerWidget> with Single
         ),
       );
     }
-    if (
-      oldWidget?.animateInBuilder != widget.animateInBuilder &&
-      _controller.status == AnimationStatus.forward
-    ) {
-      _builder = widget.animateInBuilder;
-    }
-    if (
-      oldWidget?.animateOutBuilder != widget.animateOutBuilder &&
-      _controller.status == AnimationStatus.reverse
-    ) {
-      _builder = widget.animateOutBuilder;
-    }
     if (oldWidget?.animationDirection != widget.animationDirection) {
       if (widget.animationDirection == AnimationDirection.animateIn) {
-        _builder = widget.animateInBuilder;
-
         final from = _controller.isAnimating ? _animation.value : 0.0;
         _controller.forward(from: from);
       }
-      else  {
-        _builder = widget.animateOutBuilder;
-
+      else if (widget.animationDirection == AnimationDirection.animateOut) {
         final from = _controller.isAnimating ? _animation.value : 1.0;
         // this may also immediately trigger an animation status change,
         // because of that the status listener contains some additional logic
         _controller.reverse(from: from);
+      }
+      // if AnimationDirection.none and the controller is not animating
+      // set the animation to its finish value
+      else if (!_controller.isAnimating) {
+        _controller.value = 1;
       }
     }
   }
 
 
   @override
-  Widget build(BuildContext context) => _builder(context, _animation, widget.child);
+  Widget build(BuildContext context) => widget.builder(context, _animation);
 
 
   @override
@@ -165,19 +132,17 @@ class _AnimatedMarkerWidgetState extends State<AnimatedMarkerWidget> with Single
 }
 
 
-
 enum AnimationDirection {
   animateIn,
-  animateOut
+  animateOut,
+  none
 }
 
 
-class AnimateMarkerEndNotification extends Notification {
-  final BuildContext context;
-  final AnimationDirection animationDirection;
+class AnimatedMarkerRemoveNotification extends Notification {
+  final Key markerKey;
 
-  AnimateMarkerEndNotification({
-    required this.context,
-    required this.animationDirection
+  AnimatedMarkerRemoveNotification({
+    required this.markerKey
   });
 }

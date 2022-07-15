@@ -3,17 +3,14 @@ import 'package:animated_marker_layer/src/size_utils.dart';
 import 'package:flutter/widgets.dart';
 import 'package:latlong2/latlong.dart';
 
-class AnimatedMarker {
-  static Widget _defaultAnimateBuilder(BuildContext context, Animation<double> animation, Widget child) {
-    return Transform.scale(
-      scale: animation.value,
-      child: child
-    );
-  }
+typedef AnimatedMarkerBuilder<T extends AnimatedMarker> = Widget Function(
+  BuildContext context, Animation<double> animation, T marker
+);
 
+class AnimatedMarker {
   final LatLng point;
 
-  final Widget child;
+  final AnimatedMarkerBuilder builder;
 
   final Key key;
 
@@ -24,17 +21,6 @@ class AnimatedMarker {
   // If false the marker will be counter rotated on map rotation, else it will rotate with the map.
 
   final bool rotate;
-
-  final Widget Function(
-    BuildContext context,
-    Animation<double> animation,
-    Widget child
-  ) animateInBuilder;
-  final Widget Function(
-    BuildContext context,
-    Animation<double> animation,
-    Widget child
-  ) animateOutBuilder;
 
   final Curve animateInCurve;
   final Curve animateOutCurve;
@@ -50,13 +36,11 @@ class AnimatedMarker {
   AnimatedMarker({
     required this.key,
     required this.point,
-    required this.child,
+    required this.builder,
     this.size = const Size.square(30),
     SizeUnit sizeUnit = SizeUnit.pixels,
     this.anchor = Alignment.center,
     this.rotate = false,
-    this.animateInBuilder = _defaultAnimateBuilder,
-    this.animateOutBuilder = _defaultAnimateBuilder,
     this.animateInCurve = Curves.elasticOut,
     this.animateOutCurve = Curves.elasticOut,
     this.animateInDuration = const Duration(milliseconds: 600),
@@ -70,6 +54,11 @@ class AnimatedMarker {
     else {
       pixelSize = _meters;
     }
+  }
+
+
+  Widget build(BuildContext context, Animation<double> animation) {
+    return builder(context, animation, this);
   }
 
 
