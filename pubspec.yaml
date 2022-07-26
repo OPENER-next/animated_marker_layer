@@ -10,11 +10,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_map: ^1.0.0
+  flutter_map: ^2.1.1
   latlong2: ^0.8.0
   diffutil_dart: ^3.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^1.0.0
+  flutter_lints: ^2.0.1
