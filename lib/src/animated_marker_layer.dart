@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:diffutil_dart/diffutil.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_map/plugin_api.dart';
@@ -36,22 +34,9 @@ class AnimatedMarkerLayer<T extends AnimatedMarker> extends StatefulWidget {
 
 
 class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<AnimatedMarkerLayer<T>> {
-
-  late MapState _map;
-
-  StreamSubscription? _streamSubscription;
-
   final _newMarkers = <Key>{};
 
   final _removedMarkers = <Key, T>{};
-
-  // done for performance optimizations
-
-  var _previousZoom = -1.0;
-
-  final _pixelPositionCache = <CustomPoint>[];
-
-  final _pixelSizeCache = <Size>[];
 
   @override
   void initState() {
@@ -64,28 +49,6 @@ class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<Animated
   void didUpdateWidget(covariant AnimatedMarkerLayer<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
     _update(oldWidget.markers);
-    _refreshPixelCache();
-  }
-
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    _streamSubscription?.cancel();
-
-    _map = MapState.maybeOf(context)!;
-
-    _streamSubscription = _map.onMoved.listen((_) {
-      if (_map.zoom != _previousZoom) {
-        _refreshPixelCache();
-        // cache last zoom level to detect potential optimizations
-        _previousZoom = _map.zoom;
-      }
-      setState(() {});
-    });
-
-    _refreshPixelCache();
   }
 
 
@@ -122,26 +85,13 @@ class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<Animated
   }
 
 
-  void _refreshPixelCache() {
-    _pixelPositionCache.clear();
-    _pixelSizeCache.clear();
-
-    for (final marker in widget.markers) {
-      _pixelPositionCache.add(_map.project(marker.point));
-      _pixelSizeCache.add(marker.pixelSize(_map.zoom));
-    }
-  }
-
-
   /// Returns null if the marker widget is not visible.
 
-  Widget? _buildMarkerWidget(T marker, {
-    required AnimationDirection animationDirection,
-    CustomPoint? cachedPixelPosition,
-    Size? cachedPixelSize,
-  }) {
-    final CustomPoint pxPoint = cachedPixelPosition ?? _map.project(marker.point);
-    final Size size = cachedPixelSize ?? marker.pixelSize(_map.zoom);
+  Widget? _buildMarkerWidget(T marker, AnimationDirection animationDirection) {
+    final map = FlutterMapState.maybeOf(context)!;
+
+    final pxPoint = map.project(marker.point);
+    final size = marker.pixelSize(map.zoom);
 
     // shift position to anchor
     final shift = marker.anchor.alongSize(size);
@@ -149,13 +99,13 @@ class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<Animated
     final sw = CustomPoint(pxPoint.x + shift.dx, pxPoint.y - shift.dy);
     final ne = CustomPoint(pxPoint.x - shift.dx, pxPoint.y + shift.dy);
 
-    final isVisible = _map.pixelBounds.containsPartialBounds(Bounds(sw, ne));
+    final isVisible = map.pixelBounds.containsPartialBounds(Bounds(sw, ne));
 
     if (!isVisible || size.longestSide <= 1) {
       return null;
     }
 
-    final pos = pxPoint - _map.getPixelOrigin();
+    final pos = pxPoint - map.pixelOrigin;
 
     // Wrap in animated marker widget if animation direction is given
     Widget markerWidget = AnimatedMarkerWidget(
@@ -173,7 +123,7 @@ class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<Animated
     // Counter rotate marker to the map rotation if it should stay steady
     markerWidget = !marker.rotate
       ? Transform.rotate(
-          angle: -_map.rotationRad,
+          angle: - map.rotationRad,
           alignment: marker.anchor,
           child: markerWidget,
         )
@@ -194,10 +144,7 @@ class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<Animated
     final markerWidgets = <Widget>[];
 
     _removedMarkers.removeWhere((key, marker) {
-      final markerWidget = _buildMarkerWidget(
-        marker,
-        animationDirection: AnimationDirection.animateOut
-      );
+      final markerWidget = _buildMarkerWidget(marker, AnimationDirection.animateOut);
 
       if (markerWidget == null) {
         // remove off screen markers immediately
@@ -207,16 +154,12 @@ class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<Animated
       return false;
     });
 
-    for (var i = 0; i < widget.markers.length; i++) {
-      final marker = widget.markers[i];
-      final markerWidget = _buildMarkerWidget(
-        marker,
+    for (final marker in widget.markers) {
+      final markerWidget = _buildMarkerWidget(marker,
         // if marker key was present in _newMarkers animate it, else not
-        animationDirection: _newMarkers.remove(marker.key)
+        _newMarkers.remove(marker.key)
           ? AnimationDirection.animateIn
           : AnimationDirection.none,
-        cachedPixelPosition: _pixelPositionCache[i],
-        cachedPixelSize: _pixelSizeCache[i]
       );
 
       if (markerWidget != null) {
@@ -248,12 +191,5 @@ class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<Animated
         children: _buildMarkerWidgets()
       )
     );
-  }
-
-
-  @override
-  void dispose() {
-    _streamSubscription?.cancel();
-    super.dispose();
   }
 }
