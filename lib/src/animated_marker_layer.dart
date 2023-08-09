@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:diffutil_dart/diffutil.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_map/plugin_api.dart';
@@ -88,24 +90,24 @@ class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<Animated
   /// Returns null if the marker widget is not visible.
 
   Widget? _buildMarkerWidget(T marker, AnimationDirection animationDirection) {
-    final map = FlutterMapState.maybeOf(context)!;
+    final mapCamera = MapCamera.of(context);
 
-    final pxPoint = map.project(marker.point);
-    final size = marker.pixelSize(map.zoom);
+    final pxPoint = mapCamera.project(marker.point);
+    final size = marker.pixelSize(mapCamera.zoom);
 
     // shift position to anchor
     final shift = marker.anchor.alongSize(size);
 
-    final sw = CustomPoint(pxPoint.x + shift.dx, pxPoint.y - shift.dy);
-    final ne = CustomPoint(pxPoint.x - shift.dx, pxPoint.y + shift.dy);
+    final sw = Point(pxPoint.x + shift.dx, pxPoint.y - shift.dy);
+    final ne = Point(pxPoint.x - shift.dx, pxPoint.y + shift.dy);
 
-    final isVisible = map.pixelBounds.containsPartialBounds(Bounds(sw, ne));
+    final isVisible = mapCamera.pixelBounds.containsPartialBounds(Bounds(sw, ne));
 
     if (!isVisible || size.longestSide <= 1) {
       return null;
     }
 
-    final pos = pxPoint - map.pixelOrigin;
+    final pos = pxPoint - mapCamera.pixelOrigin.toDoublePoint();
 
     // Wrap in animated marker widget if animation direction is given
     Widget markerWidget = AnimatedMarkerWidget(
@@ -123,7 +125,7 @@ class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<Animated
     // Counter rotate marker to the map rotation if it should stay steady
     markerWidget = !marker.rotate
       ? Transform.rotate(
-          angle: - map.rotationRad,
+          angle: - mapCamera.rotationRad,
           alignment: marker.anchor,
           child: markerWidget,
         )
