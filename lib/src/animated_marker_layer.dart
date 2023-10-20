@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'package:diffutil_dart/diffutil.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_map/plugin_api.dart';
+import 'package:flutter_map/flutter_map.dart';
 
 import 'animated_marker.dart';
 import 'animated_marker_widget.dart';
@@ -31,7 +31,7 @@ class AnimatedMarkerLayer<T extends AnimatedMarker> extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _AnimatedMarkerLayerState<T> createState() => _AnimatedMarkerLayerState<T>();
+  State<AnimatedMarkerLayer<T>> createState() => _AnimatedMarkerLayerState<T>();
 }
 
 
