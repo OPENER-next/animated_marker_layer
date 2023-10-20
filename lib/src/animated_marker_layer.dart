@@ -119,7 +119,7 @@ class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<Animated
       animateInDelay: marker.animateInDelay,
       animateOutDelay: marker.animateOutDelay,
       markerKey: marker.key,
-      builder: marker.build
+      builder: marker.build,
     );
 
     // Counter rotate marker to the map rotation if it should stay steady
@@ -137,7 +137,7 @@ class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<Animated
       height: size.height,
       left: pos.x - shift.dx,
       top: pos.y - shift.dy,
-      child: markerWidget
+      child: markerWidget,
     );
   }
 
@@ -187,11 +187,13 @@ class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<Animated
 
   @override
   Widget build(BuildContext context) {
-    return NotificationListener<AnimatedMarkerRemoveNotification>(
-      onNotification: _handleAnimationEnd,
-      child: Stack(
-        children: _buildMarkerWidgets()
-      )
+    return MobileLayerTransformer(
+      child: NotificationListener<AnimatedMarkerRemoveNotification>(
+        onNotification: _handleAnimationEnd,
+        child: Stack(
+          children: _buildMarkerWidgets(),
+        ),
+      ),
     );
   }
 }
