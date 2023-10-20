@@ -54,7 +54,7 @@ class _AnimatedMarkerLayerState<T extends AnimatedMarker> extends State<Animated
   }
 
 
-  _update([ List<T>oldMarkers = const [] ]) {
+  void _update([ List<T>oldMarkers = const [] ]) {
     final diffResult = calculateListDiff<T>(
       oldMarkers, widget.markers,
       equalityChecker: _equalityCheck

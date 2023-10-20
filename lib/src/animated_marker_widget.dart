@@ -20,7 +20,6 @@ class AnimatedMarkerWidget extends StatefulWidget {
   final Curve animateOutCurve;
 
   const AnimatedMarkerWidget({
-    Key? key,
     required this.builder,
     required this.markerKey,
     this.animationDirection = AnimationDirection.animateIn,
@@ -30,7 +29,8 @@ class AnimatedMarkerWidget extends StatefulWidget {
     this.animateOutDelay = Duration.zero,
     this.animateInCurve = Curves.elasticOut,
     this.animateOutCurve = Curves.elasticOut,
-  }) : super(key: key);
+    super.key,
+  });
 
 
   @override

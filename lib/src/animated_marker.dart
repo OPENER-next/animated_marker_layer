@@ -1,7 +1,7 @@
-
-import 'package:animated_marker_layer/src/size_utils.dart';
 import 'package:flutter/widgets.dart';
 import 'package:latlong2/latlong.dart';
+
+import 'size_utils.dart';
 
 typedef AnimatedMarkerBuilder<T extends AnimatedMarker> = Widget Function(
   BuildContext context, Animation<double> animation, T marker
